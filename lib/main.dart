@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'models/channel.dart';
 
 void main() {
@@ -34,7 +35,10 @@ class _IptvHomePageState extends State<IptvHomePage> {
   Channel? playingChannel;
   VlcPlayerController? vlcController;
   bool isLoading = true;
+
+  // 源地址存储
   String sourceUrl = "https://iptv-org.github.io/iptv/index.m3u";
+  final TextEditingController _urlInputCtrl = TextEditingController();
 
   // 焦点管理
   final List<FocusNode> focusNodes = [];
@@ -43,10 +47,30 @@ class _IptvHomePageState extends State<IptvHomePage> {
   @override
   void initState() {
     super.initState();
+    // 读取上次保存的源
+    loadSavedSourceUrl();
+  }
+
+  // 读取本地缓存的源地址
+  Future<void> loadSavedSourceUrl() async {
+    final sp = await SharedPreferences.getInstance();
+    String? savedUrl = sp.getString("iptv_source_url");
+    if (savedUrl != null && savedUrl.isNotEmpty) {
+      sourceUrl = savedUrl;
+      _urlInputCtrl.text = savedUrl;
+    }
+    // 加载频道
     loadM3uSource();
   }
 
-  // 加载M3U并创建对应焦点节点
+  // 保存自定义源到本地
+  Future<void> saveSourceUrl(String url) async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString("iptv_source_url", url);
+    setState(() => sourceUrl = url);
+  }
+
+  // 加载并解析M3U
   Future<void> loadM3uSource() async {
     setState(() => isLoading = true);
     try {
@@ -71,13 +95,11 @@ class _IptvHomePageState extends State<IptvHomePage> {
           f.dispose();
         }
         focusNodes.clear();
-        // 每个频道生成一个焦点
         for (int i = 0; i < channelList.length; i++) {
           focusNodes.add(FocusNode());
         }
         isLoading = false;
       });
-      // 默认选中第一条
       if (focusNodes.isNotEmpty) {
         focusNodes[0].requestFocus();
         currentFocusIndex = 0;
@@ -92,25 +114,52 @@ class _IptvHomePageState extends State<IptvHomePage> {
     }
   }
 
+  // 弹出输入源地址弹窗
+  void showInputSourceDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("导入M3U直播源"),
+        content: TextField(
+          controller: _urlInputCtrl,
+          decoration: const InputDecoration(
+            hintText: "粘贴你的m3u/m3u8网络地址",
+          ),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text("取消")),
+          ElevatedButton(
+            onPressed: () async {
+              String newUrl = _urlInputCtrl.text.trim();
+              if(newUrl.isEmpty) return;
+              await saveSourceUrl(newUrl);
+              Navigator.pop(ctx);
+              loadM3uSource();
+            },
+            child: const Text("确认加载"),
+          )
+        ],
+      ),
+    );
+  }
+
   // 遥控器按键处理
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyDownEvent) {
       switch (event.logicalKey) {
-        // 向下
         case LogicalKeyboardKey.arrowDown:
           if (currentFocusIndex < channelList.length - 1) {
             setState(() => currentFocusIndex += 1);
             focusNodes[currentFocusIndex].requestFocus();
           }
           return KeyEventResult.handled;
-        // 向上
         case LogicalKeyboardKey.arrowUp:
           if (currentFocusIndex > 0) {
             setState(() => currentFocusIndex -= 1);
             focusNodes[currentFocusIndex].requestFocus();
           }
           return KeyEventResult.handled;
-        // OK确认播放当前焦点频道
         case LogicalKeyboardKey.select:
         case LogicalKeyboardKey.enter:
           playChannel(channelList[currentFocusIndex]);
@@ -177,9 +226,16 @@ class _IptvHomePageState extends State<IptvHomePage> {
       appBar: AppBar(
         title: Text(playingChannel?.name ?? "IPTV TV播放器"),
         actions: [
+          // 设置按钮：导入源
+          IconButton(
+            icon: const Icon(Icons.link),
+            onPressed: showInputSourceDialog,
+            tooltip: "导入自定义M3U源",
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: loadM3uSource,
+            tooltip: "刷新当前源",
           )
         ],
       ),
@@ -200,7 +256,7 @@ class _IptvHomePageState extends State<IptvHomePage> {
           // 播放区域
           Expanded(
             child: playingChannel == null
-                ? const Center(child: Text("遥控器上下切换频道，OK确认播放"))
+                ? const Center(child: Text("遥控器上下切换频道，OK确认播放\n右上角链接按钮导入自定义直播源"))
                 : VlcPlayer(
                     controller: vlcController!,
                     aspectRatio: 16 / 9,
