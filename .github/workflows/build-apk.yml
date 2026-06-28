@@ -7,27 +7,30 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Setup Flutter
+      - name: Install system VLC library (解决flutter_vlc编译缺失)
+        run: sudo apt update && sudo apt install libvlc-dev vlc-bin -y
+
+      - name: Setup Flutter SDK
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.22.0'
 
-      # 新增国内Flutter镜像加速
-      - name: Set Flutter China Mirror
+      # 国内镜像，解决海外pub拉取超时
+      - name: Set Flutter China Pub Mirror
         run: |
           echo "PUB_HOSTED_URL=https://pub.flutter-io.cn" >> $GITHUB_ENV
           echo "FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn" >> $GITHUB_ENV
 
-      - name: Install dependencies
+      - name: Install all flutter dependencies
         run: flutter pub get
 
-      - name: Build Release APK
+      - name: Compile Android Release APK
         run: flutter build apk --release --split-per-abi
 
-      - name: Upload APK Artifact
+      - name: Upload compiled APK to Artifacts
         uses: actions/upload-artifact@v4
         with:
           path: build/app/outputs/flutter-apk/*.apk
