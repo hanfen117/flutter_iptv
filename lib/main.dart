@@ -37,11 +37,9 @@ class _IptvHomePageState extends State<IptvHomePage> {
   VlcPlayerController? vlcController;
   bool isLoading = true;
 
-  // 网络源地址存储
   String sourceUrl = "https://iptv-org.github.io/iptv/index.m3u";
   final TextEditingController _urlInputCtrl = TextEditingController();
 
-  // 焦点管理
   final List<FocusNode> focusNodes = [];
   int currentFocusIndex = 0;
 
@@ -51,7 +49,6 @@ class _IptvHomePageState extends State<IptvHomePage> {
     loadSavedSourceUrl();
   }
 
-  // 读取本地缓存的网络源地址
   Future<void> loadSavedSourceUrl() async {
     final sp = await SharedPreferences.getInstance();
     String? savedUrl = sp.getString("iptv_source_url");
@@ -62,18 +59,15 @@ class _IptvHomePageState extends State<IptvHomePage> {
     loadM3uSource();
   }
 
-  // 保存网络源到本地缓存
   Future<void> saveSourceUrl(String url) async {
     final sp = await SharedPreferences.getInstance();
     await sp.setString("iptv_source_url", url);
     setState(() => sourceUrl = url);
   }
 
-  // ====================== 核心新增：本地M3U文件读取 ======================
   Future<void> loadLocalM3UFile() async {
     setState(() => isLoading = true);
     try {
-      // 只筛选 m3u / m3u8 格式文件
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['m3u', 'm3u8'],
@@ -81,23 +75,21 @@ class _IptvHomePageState extends State<IptvHomePage> {
 
       if (result == null || result.files.isEmpty) {
         setState(() => isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("未选择任何文件")));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("未选择文件")));
         return;
       }
 
-      // 读取本地文件文本内容
       PlatformFile file = result.files.first;
       String rawText = await file.xFile.readAsString();
-      await parseM3uContent(rawText); // 复用M3U解析函数
+      await parseM3uContent(rawText);
     } catch (e) {
       setState(() => isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("读取本地文件失败：$e")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("读取文件失败：$e")));
       }
     }
   }
 
-  // 通用M3U解析函数（网络/本地文件共用）
   Future<void> parseM3uContent(String rawText) async {
     RegExp reg = RegExp(
       r'#EXTINF:-1 tvg-name="([^"]+)"( tvg-logo="([^"]+)")? group-title="([^"]+)".*\n([^\n#]+)',
@@ -113,7 +105,6 @@ class _IptvHomePageState extends State<IptvHomePage> {
     }
     setState(() {
       channelList = tempList;
-      // 销毁旧焦点
       for (var f in focusNodes) {
         f.dispose();
       }
@@ -127,10 +118,9 @@ class _IptvHomePageState extends State<IptvHomePage> {
       focusNodes[0].requestFocus();
       currentFocusIndex = 0;
     }
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("成功加载 ${tempList.length} 个频道")));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("加载完成，共${tempList.length}个频道")));
   }
 
-  // 加载网络M3U源
   Future<void> loadM3uSource() async {
     setState(() => isLoading = true);
     try {
@@ -139,12 +129,11 @@ class _IptvHomePageState extends State<IptvHomePage> {
     } catch (e) {
       setState(() => isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("网络源加载失败：$e")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("在线源加载失败：$e")));
       }
     }
   }
 
-  // 弹出导入选择弹窗（网络源 + 本地文件双选项）
   void showImportSourceDialog() {
     showDialog(
       context: context,
@@ -188,7 +177,6 @@ class _IptvHomePageState extends State<IptvHomePage> {
     );
   }
 
-  // 遥控器按键处理
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyDownEvent) {
       switch (event.logicalKey) {
@@ -243,9 +231,7 @@ class _IptvHomePageState extends State<IptvHomePage> {
       focusNode: focusNodes[index],
       onKeyEvent: _handleKeyEvent,
       onFocusChange: (hasFocus) {
-        if (hasFocus) {
-          setState(() => currentFocusIndex = index);
-        }
+        if (hasFocus) setState(() => currentFocusIndex = index);
       },
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -270,7 +256,6 @@ class _IptvHomePageState extends State<IptvHomePage> {
       appBar: AppBar(
         title: Text(playingChannel?.name ?? "IPTV TV播放器"),
         actions: [
-          // 导入源按钮（在线+本地文件）
           IconButton(
             icon: const Icon(Icons.folder_open),
             onPressed: showImportSourceDialog,
@@ -279,14 +264,13 @@ class _IptvHomePageState extends State<IptvHomePage> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: loadM3uSource,
-            tooltip: "刷新当前在线源",
+            tooltip: "刷新在线源",
           )
         ],
       ),
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 左侧焦点频道列表
           SizedBox(
             width: 260,
             child: isLoading
@@ -297,10 +281,9 @@ class _IptvHomePageState extends State<IptvHomePage> {
                   ),
           ),
           const VerticalDivider(width: 1),
-          // 播放区域
           Expanded(
             child: playingChannel == null
-                ? const Center(child: Text("遥控器上下切换频道，OK确认播放\n右上角文件夹按钮导入本地/在线直播源"))
+                ? const Center(child: Text("遥控器上下切换频道，OK确认播放\n右上角文件夹导入在线/本地M3U"))
                 : VlcPlayer(
                     controller: vlcController!,
                     aspectRatio: 16 / 9,
